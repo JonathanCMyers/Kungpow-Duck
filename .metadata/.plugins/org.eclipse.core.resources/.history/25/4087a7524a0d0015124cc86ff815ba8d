@@ -1,0 +1,499 @@
+package GameState;
+
+import Main.GamePanel;
+import TileMap.*;
+import Entity.*;
+import Entity.Enemies.*;
+import Entity.NPCs.*;
+import Entity.PartyMembers.*;
+import Chatbox.*;
+
+import java.awt.*;
+import java.awt.event.KeyEvent;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+public class Level1State extends GameState {
+	
+	private TileMap tileMap;
+	private Background bg;
+	
+	public static Player player;
+	public static Enemy enemyHit;
+	
+	public static Carrie carrie;
+	public static Carrie carrie2;
+	public static Carrie carrie3;
+	public static Carrie carrie4;
+	
+	private boolean chatboxOpen;
+	
+	private ArrayList<NPC> NPCs;
+	private ArrayList<Enemy> enemies;
+	private ArrayList<Explosion> explosions;
+	private ArrayList<Tree> trees;
+	public static ArrayList<PartyMember> partyMembers;
+	public static ArrayList<Chatbox> subMenus;
+	
+	private long chatboxStartingTime;
+	private int enemyRecentlyHit;
+	public static final long chatboxDelay = 30;
+	
+	private int npcNumber;		// holds the value that the NPC that is currently talking is stored at in the arraylist
+	
+	private Chatbox cb;
+	private OptionsChatbox optionsMenu;
+	private AlmostFillerChatbox itemsMenu;
+	private boolean battlePhaseStarting;
+	
+	private HUD hud;
+	private Point[] points;
+	
+	public Level1State(GameStateManager gsm) {
+		this.gsm = gsm;
+		init();
+	}
+	
+	public int returnStateType() {
+		return GameStateManager.LEVEL1STATE;
+	}
+	
+	@Override
+	public void init() {
+		/*tileMap = new TileMap(30); // use tile sizes of 30 bc yolo
+		tileMap.loadTiles("/Tilesets/grasstileset.gif");
+		tileMap.loadMap("/Maps/level1-1.map"); */
+		tileMap = new TileMap(32);
+		//tileMap.loadTiles("/Tilesets/grass.png");
+		tileMap.loadTiles("/Tilesets/twgt.png");
+		tileMap.loadMap("/Maps/level1-2.map");	
+		tileMap.setPosition(0, 0); // good starting point maybe 
+		tileMap.setSmoother(1); 
+		battlePhaseStarting = false;
+		
+		bg = new Background("/Backgrounds/grassbg1.gif", 0.1); // .1 is the move scale, 10% tilemap speed
+		
+		player = new Player(tileMap);
+		//player.setPosition(100, 150);
+		player.setPosition(64, 96);
+		carrie = new Carrie(tileMap);
+		carrie2 = new Carrie(tileMap);
+		carrie3 = new Carrie(tileMap);
+		carrie4 = new Carrie(tileMap);
+		NPCs = new ArrayList<NPC>();
+		partyMembers = new ArrayList<PartyMember>();
+		SpiderNPC spiderNPC1 = new SpiderNPC(tileMap);
+		spiderNPC1.setPosition(75, 195);	// puts him on the blocked tile
+		NPCs.add(spiderNPC1);
+		partyMembers.add(player);
+		
+		trees = new ArrayList<Tree>();
+		Point pxx = new Point(360 - (37), 120);
+		Tree tree1 = new Tree(tileMap, pxx, Tree.PINETREE, true);
+		trees.add(tree1);
+		//int x = player.getHealth();
+		//System.out.println(x);
+		
+		// Chatbox Initialization
+		subMenus = new ArrayList<Chatbox>();
+		optionsMenu = new OptionsChatbox();
+		itemsMenu = new AlmostFillerChatbox();
+		
+		populateEnemies();
+		
+		gsm.removeBattleState();
+		
+		explosions = new ArrayList<Explosion>();
+		
+		hud = new HUD(player);
+	}
+	
+	public void say(String s, int x, int y){
+		
+	}
+	
+	private void populateEnemies(){
+		enemies = new ArrayList<Enemy>();
+		Slugger slug;
+		Snake snak;
+		points = new Point[]{
+			new Point(150, 65), 
+			new Point(200, 100),
+			new Point(273, 143), 
+			new Point(289, 189),
+			new Point(500, 220),
+			new Point(860, 200),
+			new Point(1525, 200), 
+			new Point(1680, 200), 
+			new Point(1800, 200),
+			new Point(860, 300),
+			new Point(500, 200),
+			new Point(1800, 300)
+		}; 
+	/*	for(int j = 0; j < points.length; j++){
+			slug = new Slugger(tileMap);
+			slug.setPosition(points[j].x, points[j].y);
+			enemies.add(slug);
+		} */
+		
+		for(int j = 0; j < 1; j++){
+		//for(int j = 0; j < points.length; j++){
+		//for(int j = 0; j < points.length-4; j++){
+			snak = new Snake(tileMap);
+			snak.setPosition(points[j].x, points[j].y);
+			if(j%2 == 0) snak.setRight();
+			else snak.setLeft();
+			enemies.add(snak);
+		}
+	/*	slug = new Slugger(tileMap);
+		slug.setPosition(100, 100);
+		enemies.add(slug); */
+	}
+	
+	@Override
+	public void update() {
+		if(BattleState.wonBattle == BattleState.WONBATTLE){
+			enemies.remove(enemyRecentlyHit);
+			BattleState.wonBattle = BattleState.NOBATTLE;
+		}
+		else if(BattleState.wonBattle == BattleState.FLEDBATTLE){
+			enemies.remove(enemyRecentlyHit);
+			BattleState.wonBattle = BattleState.NOBATTLE;
+		}
+		else if(BattleState.wonBattle == BattleState.LOSTBATTLE){
+			gsm.setState(GameStateManager.ENDGAMESTATE);
+		}
+		// update player
+		if(!chatboxOpen && !optionsMenu.isOpen()){
+			player.update();	// SHRUGS
+		}
+		if(player.isDead()) gsm.setState(GameStateManager.ENDGAMESTATE); 
+		tileMap.setPosition(GamePanel.WIDTH / 2 - player.getx(), GamePanel.HEIGHT / 2 - player.gety());
+		bg.setPosition(tileMap.getx(),  tileMap.gety());
+		// attack enemies
+		//player.checkAttack(enemies);
+		gsm.removeBattleState();
+		// check to see if battle phase should be initiated
+		for(int j = 0; j < enemies.size(); j++){
+			Enemy e = enemies.get(j);
+			if(player.intersects(e)){
+				enemyHit = e;
+				BattleState b = new BattleState(gsm);
+				b.addEnemies(e);
+				//enemies.remove(j);
+				enemyRecentlyHit = j;
+				gsm.addState(b);
+				gsm.setState(GameStateManager.BATTLESTATE);
+				if(!player.priorityEmpty()) player.emptyPriority();
+				player.setHighSpeed(false);
+			}
+		}
+		/*if(!battlePhaseStarting){
+			for(int j = 0; j < enemies.size(); j++){
+				Enemy e = enemies.get(j);
+				if(player.intersects(e)){
+					enemyHit = e;
+					BattleState b = new BattleState(gsm);
+					b.addEnemies(e);
+					enemies.remove(j);
+					//b.addPartyMembers(partyMembers);
+					gsm.addState(b); 
+					battlePhaseStarting = true;
+					gsm.setState(GameStateManager.BATTLESTATE);
+					battlePhaseStarting = false;
+				}
+			}
+		} */
+		
+		
+		// add new enemies if there are less than 4 enemies on the field
+		if(enemies.size() < 4){
+			Random r = new Random(System.nanoTime());
+			int i = r.nextInt() % 100;
+			if(i == 1){
+				Snake snak = new Snake(tileMap);
+				//snak.setPosition(points[r.nextInt(8)].getX(), points[r.nextInt(8)].getY());	idk why but this is very glitchy
+				snak.setPosition(points[0].getX(), points[0].getY());
+				if(r.nextInt()%100 % 2 == 0) snak.setLeft();
+				else snak.setRight();
+				enemies.add(snak);
+			}
+		}
+		
+		
+		// update all enemies
+		if(!chatboxOpen && !optionsMenu.isOpen()){
+			for(int j = 0; j < enemies.size(); j++){
+				Enemy e = enemies.get(j);
+				enemies.get(j).update();
+				((Snake) enemies.get(j)).randomMove();
+				if(enemies.get(j).isDead()){
+					enemies.remove(j);
+					j--;
+					explosions.add(new Explosion(e.getx(), e.gety()));
+				}
+			}
+		}
+		// update all dialogue
+	/*	for(int j = 0; j < NPCs.size(); j++){
+			if()
+		} */
+		// update explosions
+		for(int j = 0; j < explosions.size(); j++){
+			explosions.get(j).update();
+			if(explosions.get(j).shouldRemove()){
+				explosions.remove(j);
+				j--;
+			}
+		}
+	}
+	@Override
+	public void draw(Graphics2D g) {
+		// clear screen
+		g.setColor(Color.WHITE);
+		g.fillRect(0,0,GamePanel.WIDTH, GamePanel.HEIGHT);  
+		// draw bg
+		//bg.draw(g);
+		// draw tilemap
+		tileMap.draw(g);
+		// if you draw tilemap on top of background, aha do you get it now
+		// draw player
+		player.draw(g);
+		// draw dialogue/chatbox
+	/*	player.checkChatting(NPCs);						MAYBE BRING THIS BACK LATER
+		for(int j = 0; j < NPCs.size(); j++){
+			if(NPCs.get(j).getChatting()){
+				//cb = new Chatbox(NPCs.get(j).getFirstChatbox(), Chatbox.NORMAL, 15, GamePanel.HEIGHT-21); 
+				if(NPCs.get(j).hasSecondLine()){
+					cb = new Chatbox(NPCs.get(j).getCurrentChatbox(), NPCs.get(j).getCurrentChatboxLine2());
+				}
+				else{
+					cb = new Chatbox(NPCs.get(j).getCurrentChatbox());
+				}
+				//cb = new Chatbox(NPCs.get(j).getFirstChatbox()); // default chatbox
+				//cb.draw(g);
+				chatboxOpen = true;
+				chatboxStartingTime = System.nanoTime();
+			}
+		} */
+		if(chatboxOpen){
+			cb.draw(g);
+		}
+		// draw enemies
+		for(int j = 0; j < enemies.size(); j++){
+			enemies.get(j).draw(g);
+		}
+		// draw NPC's
+		for(int j = 0; j < NPCs.size(); j++){
+			NPCs.get(j).draw(g);
+		}
+		// draw explosions
+		for(int j = 0; j < explosions.size(); j++){
+			explosions.get(j).setMapPosition((int)tileMap.getx(), (int)tileMap.gety());
+			explosions.get(j).draw(g);
+		}
+		// draw trees
+		for(int j = 0; j < trees.size(); j++){
+			trees.get(j).draw(g);
+		}
+		optionsMenu.draw(g);
+		itemsMenu.draw(g);
+		// draw hud
+		//hud.draw(g);
+	}
+	@Override
+	public void keyPressed(int k) {
+		/*if(k != KeyEvent.VK_UP && k != KeyEvent.VK_DOWN && k != KeyEvent.VK_LEFT && k != KeyEvent.VK_RIGHT){
+			player.addPriority(Player.PRIORITYNONE);
+		} */
+		if(k == KeyEvent.VK_UP){
+			player.addPriority(Player.PRIORITYUP);
+			if(!subMenus.isEmpty()){
+				subMenus.get(subMenus.size() - 1).goUp();
+			}
+			else
+				if(optionsMenu.isOpen())
+					optionsMenu.goUp();
+			//player.setCurrentAction(player.WALKINGBACK);
+			//player.setUp(true);
+			//player.setDown(false);
+			//player.setLeft(false);
+			//player.setRight(false);
+		}
+		else if(k == KeyEvent.VK_DOWN){
+			player.addPriority(Player.PRIORITYDOWN);
+			if(!subMenus.isEmpty()){
+				subMenus.get(subMenus.size() - 1).goDown();
+			}
+			else
+				if(optionsMenu.isOpen())
+					optionsMenu.goDown();
+			
+			//player.setCurrentAction(player.WALKINGFRONT);
+			//player.setUp(false);
+			//player.setDown(true);
+			//player.setLeft(false);
+			//player.setRight(false);
+		}
+		else if(k == KeyEvent.VK_LEFT){
+			player.addPriority(Player.PRIORITYLEFT);
+			//player.setCurrentAction(player.WALKINGLEFT);
+			//player.setUp(false);
+			//player.setDown(false);
+			//player.setLeft(true);
+			//player.setRight(false);
+		}
+		else if(k == KeyEvent.VK_RIGHT) {
+			player.addPriority(Player.PRIORITYRIGHT);
+			//player.setCurrentAction(player.WALKINGRIGHT);
+			//player.setUp(false);
+			//player.setDown(false);
+			//player.setLeft(false);
+			//player.setRight(true);
+		}
+		else if(k == KeyEvent.VK_ENTER){
+			if(optionsMenu.isOpen()){
+				int optionsEnter = optionsMenu.enter();
+				switch(optionsEnter){
+				case OptionsChatbox.ITEMS:
+					itemsMenu.open();
+					subMenus.add(itemsMenu);
+					break;
+				case OptionsChatbox.SKILLS:
+				case OptionsChatbox.STATUS:
+				case OptionsChatbox.PARTY:
+				case OptionsChatbox.SAVE:
+				case OptionsChatbox.OPTIONS:
+				}
+			}
+		}
+		else if(k == KeyEvent.VK_BACK_SPACE){
+			if(itemsMenu.isOpen()){
+				itemsMenu.close();
+				subMenus.remove(itemsMenu);
+			}
+		}
+		if(k == KeyEvent.VK_V){
+			player.setHighSpeed(true);
+			//player.setMaxSpeed(2.5);
+		}
+		if(k == KeyEvent.VK_U){
+			if(optionsMenu.isOpen()){
+				optionsMenu.close();
+			}
+			else if(!optionsMenu.isOpen()){
+				optionsMenu.open();
+			}
+		}
+		if(k == KeyEvent.VK_A){
+			if(player.getChatting() == true){
+				for(int j = 0; j < NPCs.size(); j++){
+					if(NPCs.get(j).getChatting()){
+						NPCs.get(j).incrementChatboxCounter();
+						String s = NPCs.get(j).getCurrentChatbox();
+						if(s.equals("-0")){
+							NPCs.get(j).setChatting(false);
+							player.setChatting(false);
+							chatboxOpen = false;
+							NPCs.get(j).resetChatbox();
+						}
+						else{
+							if(NPCs.get(j).hasSecondLine()){
+								String t = NPCs.get(j).getCurrentChatboxLine2();
+								cb = new Chatbox(s, t);
+								chatboxOpen = true;
+								chatboxStartingTime = System.nanoTime();
+							}
+							else{
+								cb = new Chatbox(s); 
+								chatboxOpen = true;
+								chatboxStartingTime = System.nanoTime();
+							}
+						}
+					}
+				}
+			}
+			else{
+				npcNumber = player.checkIfPlayerCanChat(NPCs);
+				if(npcNumber != -1){
+					if(NPCs.get(npcNumber).hasSecondLine()){
+						cb = new Chatbox(NPCs.get(npcNumber).getCurrentChatbox(), NPCs.get(npcNumber).getCurrentChatboxLine2());
+					}
+					else{
+						cb = new Chatbox(NPCs.get(npcNumber).getCurrentChatbox());
+					}
+					chatboxOpen = true;
+					chatboxStartingTime = System.nanoTime();
+					if(!(partyMembers.contains(carrie))){
+						partyMembers.add(carrie);
+						partyMembers.add(carrie2);
+						partyMembers.add(carrie3);
+						partyMembers.add(carrie4); 
+						System.out.println("Carrie added to party");
+					}
+				}
+				/*	player.checkChatting(NPCs);
+				for(int j = 0; j < NPCs.size(); j++){
+					if(NPCs.get(j).getChatting()){
+						//cb = new Chatbox(NPCs.get(j).getFirstChatbox(), Chatbox.NORMAL, 15, GamePanel.HEIGHT-21); 
+						if(NPCs.get(j).hasSecondLine()){
+							cb = new Chatbox(NPCs.get(j).getCurrentChatbox(), NPCs.get(j).getCurrentChatboxLine2());
+						}
+						else{
+							cb = new Chatbox(NPCs.get(j).getCurrentChatbox());
+						}
+						//cb = new Chatbox(NPCs.get(j).getFirstChatbox()); // default chatbox
+						//cb.draw(g);
+						chatboxOpen = true;
+						chatboxStartingTime = System.nanoTime();
+					}
+				} */
+				//player.setChatting(true); 
+			}
+		}
+	}
+	@Override
+	public void keyReleased(int k) {
+		if(k == KeyEvent.VK_UP){
+			player.removePriority(Player.PRIORITYUP);
+			//player.setCurrentAction(player.IDLE);
+		/*	player.setUp(false);
+			player.setDown(false);
+			player.setLeft(false);
+			player.setRight(false); */
+		}
+		if(k == KeyEvent.VK_DOWN){
+			player.removePriority(Player.PRIORITYDOWN);
+			//player.setCurrentAction(player.IDLE); //
+			/*player.setUp(false);
+			player.setDown(false);
+			player.setLeft(false);
+			player.setRight(false); */
+		}
+		if(k == KeyEvent.VK_LEFT){
+			player.removePriority(Player.PRIORITYLEFT);
+			//player.setCurrentAction(player.IDLE); //
+		/*	player.setUp(false);
+			player.setDown(false);
+			player.setLeft(false);
+			player.setRight(false); */
+		}
+		if(k == KeyEvent.VK_RIGHT){
+			player.removePriority(Player.PRIORITYRIGHT);
+			//player.setCurrentAction(player.IDLE); //
+		/*	player.setUp(false);
+			player.setDown(false);
+			player.setLeft(false);
+			player.setRight(false); */
+		}
+		if(k == KeyEvent.VK_V){
+			player.setHighSpeed(false);
+			//player.setMaxSpeed(1.6);
+		}
+		//if(k == KeyEvent.VK_SPACE) player.setJumping(false);
+		//if(k == KeyEvent.VK_E) player.setGliding(false);
+		//if(k == KeyEvent.VK_R) player.setScratching();
+		//if(k == KeyEvent.VK_F) player.setFiring(); 
+	}
+}
